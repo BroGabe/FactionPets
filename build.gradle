@@ -1,0 +1,69 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.0'
+    id("io.freefair.lombok") version "8.13.1"
+}
+
+group = 'com.brogabe'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "spigotmc-repo"
+        url = "https://hub.spigotmc.org/nexus/content/repositories/snapshots/"
+    }
+    maven {
+        name = "sonatype"
+        url = "https://oss.sonatype.org/content/groups/public/"
+    }
+    maven {
+        name = "CodeMC"
+        url = uri("https://repo.codemc.io/repository/maven-public/")
+    }
+    maven { url 'https://jitpack.io' }
+    maven { url = "https://repo.aikar.co/content/groups/aikar/" }
+    maven { url = "https://hub.spigotmc.org/nexus/content/groups/public/" }
+}
+
+dependencies {
+    compileOnly "org.spigotmc:spigot-api:1.8.8-R0.1-SNAPSHOT"
+    compileOnly fileTree(dir: 'libs', include: ['*.jar'])
+    compileOnly("de.tr7zw:item-nbt-api-plugin:2.14.1")
+    compileOnly "com.github.MilkBowl:VaultAPI:1.7"
+    implementation "co.aikar:acf-paper:0.5.1-SNAPSHOT"
+    implementation "dev.triumphteam:triumph-gui:3.1.11"
+}
+
+shadowJar {
+    relocate 'co.aikar.commands', 'com.brogabe.darkzonebackpack.utils.acf'
+    relocate 'co.aikar.locales', 'com.brogabe.darkzonebackpack.utils.locales'
+    relocate("dev.triumphteam.gui", "com.brogabe.darkzonebackpack.utils.gui")
+}
+
+def targetJavaVersion = 8
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        options.release.set(targetJavaVersion)
+    }
+}
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}

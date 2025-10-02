@@ -1,0 +1,8 @@
+name: FactionPets
+version: '${version}'
+soft-depend:
+  - FactionsKore
+  - ManticHoes
+depend:
+  - Factions
+main: com.brogabe.factionpets.FactionPets
