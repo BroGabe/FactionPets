@@ -18,19 +18,19 @@ import org.bukkit.scheduler.BukkitTask;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class Robot {
 
     private final FactionPets plugin;
 
-    @Getter
-    private ItemStack itemStack;
-
     private final FactionsMenu factionsMenu;
 
     @Getter
     private final String section;
+
+    private final int increment;
 
     private BukkitTask updateTask;
 
@@ -38,11 +38,11 @@ public class Robot {
 
     private double amount = 0.0;
 
-    public Robot(FactionPets plugin, FactionsMenu factionsMenu, ItemStack itemStack, String section) {
+    public Robot(FactionPets plugin, FactionsMenu factionsMenu, String section, int increment) {
         this.plugin = plugin;
         this.factionsMenu = factionsMenu;
-        this.itemStack = itemStack;
         this.section = section;
+        this.increment = increment;
 
         autoSave = Instant.now();
 
@@ -52,28 +52,18 @@ public class Robot {
     }
 
     public void startTask() {
-        System.out.println("Did start task get called?");
         if(isRunning()) return;
 
-        System.out.println("Did my isRunning method work?");
-
         updateTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            amount = amount + 5000;
-
-            System.out.println("amount is: " + amount);
-
-            System.out.println("This happens every 30 seconds");
+            amount = amount + increment;
 
             if(isMenuOpen()) {
                 updateRobot();
                 autoSave = Instant.now();
-                System.out.println("Was menu open, causing it to update?");
                 return;
             }
 
             if(!pastFiveMinutes()) return;
-
-            System.out.println("was it past two minutes");
 
             updateRobot();
 
@@ -104,6 +94,15 @@ public class Robot {
     public void updateRobot() {
         PetModule module = plugin.getModuleManager().getPetModule();
 
+        Optional<ItemStack> itemStackOptional = getItemFromSection();
+
+        if(!itemStackOptional.isPresent()) {
+            cancelTask();
+            return;
+        }
+
+        ItemStack itemStack = itemStackOptional.get();
+
         if(!module.isRobot(itemStack)) {
             cancelTask();
             return;
@@ -115,19 +114,18 @@ public class Robot {
 
         assert nbtCompound != null;
         double currentAmount = nbtCompound.getDouble("amount");
-        System.out.println("current amount is: " + currentAmount);
         String type = nbtCompound.getString("type");
 
         nbtCompound.setDouble("amount", currentAmount + amount);
 
-        setItemStack(nbtItem.getItem());
+        ItemStack newItem = nbtItem.getItem();
 
         FileConfiguration config = factionsMenu.getConfig();
 
         PetModule petModule = plugin.getModuleManager().getPetModule();
-        petModule.updateRobotLore(type, itemStack, currentAmount + amount);
+        petModule.updateRobotLore(type, newItem, currentAmount + amount);
 
-        config.set(section, ItemSerializer.itemStackToBase64(itemStack));
+        config.set(section, ItemSerializer.itemStackToBase64(newItem));
 
         factionsMenu.saveConfig();
         factionsMenu.reloadConfig();
@@ -141,8 +139,18 @@ public class Robot {
                         || Bukkit.getScheduler().isQueued(updateTask.getTaskId())));
     }
 
-    private void setItemStack(ItemStack itemStack) {
-        this.itemStack = itemStack;
+    private Optional<ItemStack> getItemFromSection() {
+        FileConfiguration config = factionsMenu.getConfig();
+
+        ItemStack itemStack;
+
+        try {
+            itemStack = ItemSerializer.itemStackFromBase64(config.getString(section));
+        } catch (Exception exception) {
+            return Optional.empty();
+        }
+
+        return Optional.of(itemStack);
     }
 
 }

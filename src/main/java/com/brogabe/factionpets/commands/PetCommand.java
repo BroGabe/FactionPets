@@ -8,11 +8,15 @@ import co.aikar.commands.annotation.Subcommand;
 import com.brogabe.factionpets.FactionPets;
 import com.brogabe.factionpets.menus.FactionsMenu;
 import com.brogabe.factionpets.modules.types.pets.AquaticPet;
+import com.brogabe.factionpets.modules.types.pets.ExperiencePet;
+import com.brogabe.factionpets.modules.types.pets.MoneyPet;
 import com.brogabe.factionpets.modules.types.pets.TokenPet;
 import com.brogabe.factionpets.utils.ColorUtil;
 import com.brogabe.factionpets.utils.FactionsUtil;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
+
+import java.util.Optional;
 
 @CommandAlias("fpets|facpets|factionpets")
 public class PetCommand extends BaseCommand {
@@ -31,7 +35,10 @@ public class PetCommand extends BaseCommand {
             return;
         }
 
-        FactionsMenu factionsMenu = plugin.getOrCreateFactionsMenu(player);
+        Optional<FactionsMenu> optional = plugin.getOrCreateFactionsMenu(player);
+        if(!optional.isPresent()) return;
+
+        FactionsMenu factionsMenu = optional.get();
 
         factionsMenu.openMenu(player);
     }
@@ -41,5 +48,7 @@ public class PetCommand extends BaseCommand {
     public void onGive(Player player) {
         AquaticPet.givePet(player, plugin);
         TokenPet.givePet(player, plugin);
+        ExperiencePet.givePet(player, plugin);
+        MoneyPet.givePet(player, plugin);
     }
 }

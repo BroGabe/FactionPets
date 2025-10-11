@@ -11,23 +11,23 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
 
-public class TokenPet {
+public class MoneyPet {
 
     public static void givePet(Player player, FactionPets plugin) {
         FileConfiguration config = plugin.getConfig();
 
-        List<String> lore = config.getStringList("token-pet.lore");
+        List<String> lore = config.getStringList("money-pet.lore");
         lore.replaceAll(s -> s.replace("%amount%", "0"));
 
         Material material = Material.SKULL_ITEM;
-        String name = config.getString("token-pet.name");
-        String texture = config.getString("token-pet.texture");
+        String name = config.getString("money-pet.name");
+        String texture = config.getString("money-pet.texture");
 
         ItemStack itemStack = new ItemCreator(material, name, 1, 3, texture, lore).getItem();
         NBTItem nbtItem = new NBTItem(itemStack);
         NBTCompound compound = nbtItem.getOrCreateCompound("FactionPets");
 
-        compound.setString("type", "token");
+        compound.setString("type", "money");
         compound.setDouble("amount", 0.0);
 
         player.getInventory().addItem(nbtItem.getItem());

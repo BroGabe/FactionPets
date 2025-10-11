@@ -9,6 +9,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
+import java.util.Optional;
+
 public class FactionListeners implements Listener {
 
     private final FactionPets plugin;
@@ -31,7 +33,11 @@ public class FactionListeners implements Listener {
     public void onLeave(FPlayerLeaveEvent event) {
         Player player = event.getfPlayer().getPlayer();
 
-        FactionsMenu factionsMenu = plugin.getOrCreateFactionsMenu(player);
+        Optional<FactionsMenu> optional = plugin.getOrCreateFactionsMenu(player);
+
+        if(!optional.isPresent()) return;
+
+        FactionsMenu factionsMenu = optional.get();
 
         if(player.getOpenInventory() != factionsMenu.getGui().getInventory()) return;
         player.closeInventory();

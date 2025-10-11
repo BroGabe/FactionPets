@@ -29,13 +29,13 @@ public class RobotManager {
         this.factionsMenu = factionsMenu;
     }
 
-    public void addRobot(ItemStack itemStack, String section) {
-        Robot robot = new Robot(plugin, factionsMenu, itemStack, section);
+    public void addRobot(String section, int increment) {
+        Robot robot = new Robot(plugin, factionsMenu, section, increment);
         robotSet.add(robot);
     }
 
-    public void removeRobot(ItemStack itemStack, String section) {
-        List<Robot> robotList = robotSet.stream().filter(robot -> matchesClass(robot, itemStack, section)).collect(Collectors.toList());
+    public void removeRobot(String section) {
+        List<Robot> robotList = robotSet.stream().filter(robot -> matchesClass(robot, section)).collect(Collectors.toList());
 
         if(robotList.isEmpty()) return;
 
@@ -46,8 +46,12 @@ public class RobotManager {
         robotList.forEach(robotSet::remove);
     }
 
-    private boolean matchesClass(Robot robot, ItemStack itemStack, String section) {
-        return (robot.getItemStack().equals(itemStack) && robot.getSection().equalsIgnoreCase(section));
+    private boolean matchesClass(Robot robot, String section) {
+        return (robot.getSection().equalsIgnoreCase(section));
+    }
+
+    public boolean alreadyInitialized(String section) {
+        return (robotSet.stream().anyMatch(robot -> robot.getSection().equalsIgnoreCase(section)));
     }
 
     public void giveCurrency(Player player, String section, ItemStack itemStack) {
@@ -86,7 +90,13 @@ public class RobotManager {
         assert nbtCompound != null;
         nbtCompound.setDouble("amount", 0.0);
 
-        factionsMenu.getConfig().set(section, ItemSerializer.itemStackToBase64(nbtItem.getItem()));
+        ItemStack itemStack = nbtItem.getItem();
+
+        PetModule petModule = plugin.getModuleManager().getPetModule();
+
+        petModule.updateRobotLore(nbtCompound.getString("type"), itemStack, 0.0);
+
+        factionsMenu.getConfig().set(section, ItemSerializer.itemStackToBase64(itemStack));
         factionsMenu.saveConfig();
         factionsMenu.reloadConfig();
     }

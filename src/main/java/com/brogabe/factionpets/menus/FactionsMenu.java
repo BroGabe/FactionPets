@@ -2,6 +2,8 @@ package com.brogabe.factionpets.menus;
 
 import com.brogabe.factionpets.FactionPets;
 import com.brogabe.factionpets.configuration.FactionsConfig;
+import com.brogabe.factionpets.modules.types.pets.PetModule;
+import com.brogabe.factionpets.services.PetType;
 import com.brogabe.factionpets.services.RobotManager;
 import com.brogabe.factionpets.utils.ColorUtil;
 import com.brogabe.factionpets.utils.FactionsUtil;
@@ -9,6 +11,8 @@ import com.brogabe.factionpets.utils.ItemCreator;
 import com.brogabe.factionpets.utils.ItemSerializer;
 import com.massivecraft.factions.Faction;
 import com.massivecraft.factions.Factions;
+import de.tr7zw.nbtapi.NBTCompound;
+import de.tr7zw.nbtapi.NBTItem;
 import dev.triumphteam.gui.guis.Gui;
 import dev.triumphteam.gui.guis.GuiItem;
 import lombok.Getter;
@@ -22,12 +26,12 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public class FactionsMenu {
 
-    // Must start robots upon logging in
+    private final FactionPets plugin;
+
     private final FactionsConfig factionsConfig;
 
     private final FileConfiguration mainConfig;
@@ -43,13 +47,9 @@ public class FactionsMenu {
     @Getter
     private final String id;
 
-    /**
-     * Gets created when first member logs in, or when a faction is created.
-     * Gets removed when a faction is disbanded. Will close inventory for all members.
-     *
-     * NOTE: Must figure out how to update robots.
-     */
     public FactionsMenu(FactionPets plugin, Player player) {
+        this.plugin = plugin;
+
         id = FactionsUtil.getFactionID(player);
 
         factionsConfig = plugin.getFactionsConfig();
@@ -65,7 +65,77 @@ public class FactionsMenu {
         gui.setDefaultClickAction(event -> event.setCancelled(true));
 
         buildMenu();
+        initializeRobots();
     }
+
+    public void saveConfig() {
+        factionsConfig.saveConfig(id, config);
+    }
+
+    public void addRobot(String section, int increment) {
+        robotManager.addRobot(section, increment);
+    }
+
+    private void rightClickAction(Player player, ItemStack itemStack, String section) {
+        robotManager.giveCurrency(player, section, itemStack);
+    }
+
+    private ItemStack getBlackGlass() {
+        return new ItemCreator(Material.STAINED_GLASS_PANE, "&7", 1, 15, "", "").getItem();
+    }
+
+    public void reloadConfig() {
+        config = factionsConfig.getFactionConfig(id);
+        buildMenu();
+        gui.update();
+    }
+
+    private ItemStack getAvailableGlass() {
+        String name = mainConfig.getString("available-slot.name");
+        List<String> lore = mainConfig.getStringList("available-slot.lore");
+
+        return new ItemCreator(Material.STAINED_GLASS_PANE, name, 1, 5, "", lore).getItem();
+    }
+
+    private ItemStack getGuideItem() {
+        String name = mainConfig.getString("guide-item.name");
+        List<String> lore = mainConfig.getStringList("guide-item.lore");
+
+        return new ItemCreator(Material.BOOK_AND_QUILL, name, 1, 0, "", lore).getItem();
+    }
+
+
+    private ItemStack updateName(ItemStack itemStack) {
+        ItemMeta itemMeta = itemStack.getItemMeta();
+
+        String newName = ColorUtil.color(itemMeta.getDisplayName() + " &7[Active Pet]");
+
+        itemMeta.setDisplayName(newName);
+        itemStack.setItemMeta(itemMeta);
+
+        return itemStack;
+    }
+
+    public void openMenu(Player player) {
+        if(!FactionsUtil.hasFaction(player)) {
+            player.sendMessage(ColorUtil.color("&2&lPETS &aYou do not have a faction."));
+            player.playSound(player.getLocation(), Sound.NOTE_BASS, 6, 6);
+            return;
+        }
+
+        gui.open(player);
+    }
+
+    public void closeAll() {
+        Faction faction = Factions.getInstance().getFactionById(id);
+
+        for(Player player : faction.getOnlinePlayers()) {
+            if(player.getOpenInventory() != gui.getInventory()) continue;
+
+            player.closeInventory();
+        }
+    }
+
 
     public void buildMenu() {
         GuiItem pet1 = getSectionItem("pet-1");
@@ -79,14 +149,17 @@ public class FactionsMenu {
         gui.getFiller().fill(new GuiItem(getBlackGlass()));
     }
 
-    public void openMenu(Player player) {
-        if(!FactionsUtil.hasFaction(player)) {
-            player.sendMessage(ColorUtil.color("&2&lPETS &aYou do not have a faction."));
-            player.playSound(player.getLocation(), Sound.NOTE_BASS, 6, 6);
-            return;
-        }
+    private void leftClickAction(Player player, ItemStack itemStack, String section) {
+        player.getInventory().addItem(itemStack);
+        player.playSound(player.getLocation(), Sound.ENDERDRAGON_GROWL, 5, 6);
 
-        gui.open(player);
+        config.set(section, "");
+        saveConfig();
+        reloadConfig();
+
+        gui.update();
+
+        robotManager.removeRobot(section);
     }
 
     private GuiItem getSectionItem(String section) {
@@ -102,6 +175,20 @@ public class FactionsMenu {
         guiItem.setAction(event -> clickAction(event, section));
 
         return guiItem;
+    }
+
+    public Optional<ItemStack> getItemFromSection(String section) {
+        ItemStack itemStack;
+
+        String resultString = config.getString(section);
+
+        try {
+            itemStack = ItemSerializer.itemStackFromBase64(resultString);
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+
+        return Optional.of(itemStack);
     }
 
     private void clickAction(InventoryClickEvent event, String section) {
@@ -125,92 +212,34 @@ public class FactionsMenu {
         rightClickAction(player, itemStack, section);
     }
 
-    // Used to redeem robots
-    private void rightClickAction(Player player, ItemStack itemStack, String section) {
-        robotManager.giveCurrency(player, section, itemStack);
-    }
+    private void initializeRobots() {
+        Map<String, Optional<ItemStack>> petMap = new HashMap<>();
 
-    // Check if robot, then remove robot from robots and stop task.
-    // also add a robot to robot manager when a player adds a robot pet
-    // inside of playerlistener.
-    private void leftClickAction(Player player, ItemStack itemStack, String section) {
-        player.getInventory().addItem(itemStack);
-        player.playSound(player.getLocation(), Sound.ENDERDRAGON_GROWL, 5, 6);
+        petMap.put("pet-1", getItemFromSection("pet-1"));
+        petMap.put("pet-2", getItemFromSection("pet-2"));
+        petMap.put("pet-3", getItemFromSection("pet-3"));
 
-        config.set(section, "");
-        saveConfig();
+        for(Map.Entry<String, Optional<ItemStack>> entry : petMap.entrySet()) {
+            Optional<ItemStack> optional = entry.getValue();
 
-        reloadConfig();
-        gui.update();
+            if(!optional.isPresent()) continue;
 
-        robotManager.removeRobot(itemStack, section);
-    }
+            String section = entry.getKey();
 
-    public void addRobot(ItemStack itemStack, String section) {
-        robotManager.addRobot(itemStack, section);
-    }
+            PetModule module = plugin.getModuleManager().getPetModule();
 
-    private Optional<ItemStack> getItemFromSection(String section) {
-        ItemStack itemStack;
+            if(!module.isRobot(optional.get())) continue;
+            if(robotManager.alreadyInitialized(section)) continue;
 
-        String resultString = config.getString(section);
+            NBTItem nbtItem = new NBTItem(optional.get());
+            NBTCompound compound = nbtItem.getCompound("FactionPets");
+            if(compound == null) continue;
 
-        try {
-            itemStack = ItemSerializer.itemStackFromBase64(resultString);
-        } catch (IOException e) {
-            return Optional.empty();
+            PetType petType = module.getPetType(compound.getString("type"));
+
+            int increment = module.getIncrement(petType);
+
+            addRobot(section, increment);
         }
-
-        return Optional.of(itemStack);
-    }
-
-    private ItemStack getAvailableGlass() {
-        String name = mainConfig.getString("available-slot.name");
-        List<String> lore = mainConfig.getStringList("available-slot.lore");
-
-        return new ItemCreator(Material.STAINED_GLASS_PANE, name, 1, 5, "", lore).getItem();
-    }
-
-    private ItemStack getGuideItem() {
-        String name = mainConfig.getString("guide-item.name");
-        List<String> lore = mainConfig.getStringList("guide-item.lore");
-
-        return new ItemCreator(Material.BOOK_AND_QUILL, name, 1, 0, "", lore).getItem();
-    }
-
-    private ItemStack getBlackGlass() {
-        return new ItemCreator(Material.STAINED_GLASS_PANE, "&7", 1, 15, "", "").getItem();
-    }
-
-    private ItemStack updateName(ItemStack itemStack) {
-        ItemMeta itemMeta = itemStack.getItemMeta();
-
-        String newName = ColorUtil.color(itemMeta.getDisplayName() + " &7[Active Pet]");
-
-        itemMeta.setDisplayName(newName);
-        itemStack.setItemMeta(itemMeta);
-
-        return itemStack;
-    }
-
-    public void closeAll() {
-        Faction faction = Factions.getInstance().getFactionById(id);
-
-        for(Player player : faction.getOnlinePlayers()) {
-            if(player.getOpenInventory() != gui.getInventory()) continue;
-            player.closeInventory();
-        }
-    }
-
-    /**
-     * Called when a new pet is added to the menu.
-     */
-    public void reloadConfig() {
-        config = factionsConfig.getFactionConfig(id);
-        buildMenu();
-    }
-
-    public void saveConfig() {
-        factionsConfig.saveConfig(id, config);
     }
 }

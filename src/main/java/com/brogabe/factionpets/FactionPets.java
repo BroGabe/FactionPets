@@ -66,16 +66,20 @@ public final class FactionPets extends JavaPlugin {
         // Plugin shutdown logic
     }
 
-    public FactionsMenu getOrCreateFactionsMenu(Player player) {
+    public Optional<FactionsMenu> getOrCreateFactionsMenu(Player player) {
+        if(!FactionsUtil.hasFaction(player)) {
+            return Optional.empty();
+        }
+
         String id = FactionsUtil.getFactionID(player);
 
-        if(factionsMenuMap.containsKey(id)) return factionsMenuMap.get(id);
+        if(factionsMenuMap.containsKey(id)) return Optional.of(factionsMenuMap.get(id));
 
         FactionsMenu factionsMenu = new FactionsMenu(this, player);
 
         factionsMenuMap.put(id, factionsMenu);
 
-        return factionsMenu;
+        return Optional.of(factionsMenu);
     }
 
     public void removeFactionsMenu(String id) {

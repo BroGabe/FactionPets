@@ -2,9 +2,11 @@ package com.brogabe.factionpets.modules.types.pets;
 
 import com.brogabe.factionpets.FactionPets;
 import com.brogabe.factionpets.configuration.FactionsConfig;
+import com.brogabe.factionpets.menus.FactionsMenu;
 import com.brogabe.factionpets.services.PetType;
 import com.brogabe.factionpets.utils.ColorUtil;
 import com.brogabe.factionpets.utils.FactionsUtil;
+import com.brogabe.factionpets.utils.MoneyUtil;
 import de.tr7zw.nbtapi.NBTCompound;
 import de.tr7zw.nbtapi.NBTItem;
 import org.bukkit.Material;
@@ -13,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -25,16 +28,22 @@ public class PetModule {
         this.plugin = plugin;
     }
 
-    public boolean hasPetSlots(Player player) {
-        if(!FactionsUtil.hasFaction(player)) return false;
+    public int getIncrement(PetType petType) {
+        return (petType == PetType.TOKEN ? 5000 : petType == PetType.EXPERIENCE ? 500 : 125000);
+    }
 
-        String factionID = FactionsUtil.getFactionID(player);
+    public boolean isSectionAvailable(String section, FileConfiguration config) {
+        return config.getString(section) != null && config.getString(section).isEmpty();
+    }
 
-        FactionsConfig factionsConfig = plugin.getFactionsConfig();
-        FileConfiguration config = factionsConfig.getFactionConfig(factionID);
-
-        return config.getString("pet-1").isEmpty() || config.getString("pet-2").isEmpty()
-                || config.getString("pet-3").isEmpty();
+    public PetType getPetType(String type) {
+        switch (type.toUpperCase()) {
+            case "AQUATIC": return PetType.AQUATIC;
+            case "TOKEN": return PetType.TOKEN;
+            case "MONEY": return PetType.MONEY;
+            case "EXPERIENCE": return PetType.EXPERIENCE;
+            default: return PetType.INVALID;
+        }
     }
 
     public Optional<String> getAvailableSection(Player player) {
@@ -46,8 +55,16 @@ public class PetModule {
         return config.getKeys(false).stream().filter(s -> isSectionAvailable(s, config)).findFirst();
     }
 
-    public boolean isSectionAvailable(String section, FileConfiguration config) {
-        return config.getString(section) != null && config.getString(section).isEmpty();
+    public boolean hasPetSlots(Player player) {
+        if(!FactionsUtil.hasFaction(player)) return false;
+
+        String factionID = FactionsUtil.getFactionID(player);
+
+        FactionsConfig factionsConfig = plugin.getFactionsConfig();
+        FileConfiguration config = factionsConfig.getFactionConfig(factionID);
+
+        return config.getString("pet-1").isEmpty() || config.getString("pet-2").isEmpty()
+                || config.getString("pet-3").isEmpty();
     }
 
     public boolean isRobot(ItemStack itemStack) {
@@ -66,28 +83,50 @@ public class PetModule {
     public void updateRobotLore(String type, ItemStack itemStack, double amount) {
         ItemMeta itemMeta = itemStack.getItemMeta();
 
+        String amountString = MoneyUtil.intToDollars((int) amount);
+
         PetType petType = getPetType(type);
 
         switch (petType) {
             case TOKEN:
-                List<String> lore = plugin.getConfig().getStringList("token-pet.lore")
+            case MONEY:
+            case EXPERIENCE:
+                List<String> lore = plugin.getConfig().getStringList(type + "-pet.lore")
                         .stream()
-                        .map(s -> ColorUtil.color(s
-                                        .replace("%tokens%", String.valueOf((int) amount)))).collect(Collectors.toList());
-
+                        .map(s -> ColorUtil.color(s.replace("%amount%", amountString))).collect(Collectors.toList());
                 itemMeta.setLore(lore);
                 itemStack.setItemMeta(itemMeta);
-                return;
         }
     }
 
-    public PetType getPetType(String type) {
-        switch (type.toUpperCase()) {
-            case "AQUATIC": return PetType.AQUATIC;
-            case "TOKEN": return PetType.TOKEN;
-            case "MONEY": return PetType.MONEY;
-            case "EXPERIENCE": return PetType.EXPERIENCE;
-            default: return PetType.INVALID;
+
+    public boolean hasPet(Player player, PetType petType) {
+        Optional<FactionsMenu> optional = plugin.getOrCreateFactionsMenu(player);
+
+        if(!optional.isPresent()) return false;
+
+        FactionsMenu factionsMenu = optional.get();
+
+        List<Optional<ItemStack>> itemList = Arrays.asList(factionsMenu.getItemFromSection("pet-1")
+        , factionsMenu.getItemFromSection("pet-2")
+        , factionsMenu.getItemFromSection("pet-3"));
+
+        for(Optional<ItemStack> stackOptional : itemList) {
+            if(!stackOptional.isPresent()) continue;
+
+            ItemStack itemStack = stackOptional.get();
+            NBTItem nbtItem = new NBTItem(itemStack);
+
+            if(nbtItem.getCompound("FactionPets") == null) continue;
+
+            NBTCompound compound = nbtItem.getCompound("FactionPets");
+
+            PetType itemPetType = getPetType(compound.getString("type"));
+
+            if(itemPetType != petType) continue;
+            return true;
         }
+
+        return false;
     }
 }
